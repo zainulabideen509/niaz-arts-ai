@@ -1,0 +1,20 @@
+# Niaz Arts AI Backend — Dependencies
+# Install: pip install -r requirements.txt
+
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20      # for file uploads
+
+# AI / ML
+sentence-transformers==3.3.1  # CLIP model (includes PyTorch)
+Pillow==11.1.0                # Image processing
+opencv-python-headless==4.10.0.84  # Color extraction (headless = no GUI needed on server)
+scikit-learn==1.6.1            # KMeans clustering for colors
+numpy==1.26.4
+
+# Shopify API
+requests==2.32.3
+
+# Config
+python-dotenv==1.0.1
