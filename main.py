@@ -259,9 +259,69 @@ async def analytics_full_dashboard():
         "platforms": mongo_service.get_platform_stats(),
         "hourly_usage": mongo_service.get_hourly_usage(),
         "daily_usage": mongo_service.get_daily_usage(days=30),
+        "feedback_stats": mongo_service.get_feedback_stats(),
+        "most_liked": mongo_service.get_most_liked_paintings(limit=10),
     }
 
+# ── Feedback Endpoints ───────────────────────────────────────
 
+class FeedbackRequest(BaseModel):
+    product_id: str
+    title: str
+    feedback: str  # "like" or "dislike"
+    query: str = ""
+    platform: str = "web"
+
+
+@app.post("/api/v1/feedback")
+async def submit_feedback(request: FeedbackRequest):
+    """Customer submits thumbs up/down on a recommended painting."""
+    if request.feedback not in ["like", "dislike"]:
+        raise HTTPException(status_code=400, detail="Feedback must be 'like' or 'dislike'.")
+
+    if mongo_service and mongo_service.is_connected():
+        mongo_service.save_feedback(
+            product_id=request.product_id,
+            title=request.title,
+            feedback_type=request.feedback,
+            query=request.query,
+            platform=request.platform,
+        )
+        return {"success": True, "message": f"Thank you for your feedback!"}
+    else:
+        raise HTTPException(status_code=503, detail="MongoDB not connected.")
+
+
+@app.get("/api/v1/analytics/feedback-stats")
+async def analytics_feedback_stats():
+    """Get overall feedback statistics."""
+    if not mongo_service or not mongo_service.is_connected():
+        raise HTTPException(status_code=503, detail="MongoDB not connected.")
+    return mongo_service.get_feedback_stats()
+
+
+@app.get("/api/v1/analytics/most-liked")
+async def analytics_most_liked():
+    """Get most liked paintings from recommendations."""
+    if not mongo_service or not mongo_service.is_connected():
+        raise HTTPException(status_code=503, detail="MongoDB not connected.")
+    return {"most_liked": mongo_service.get_most_liked_paintings(limit=15)}
+
+
+@app.get("/api/v1/analytics/most-disliked")
+async def analytics_most_disliked():
+    """Get most disliked paintings from recommendations."""
+    if not mongo_service or not mongo_service.is_connected():
+        raise HTTPException(status_code=503, detail="MongoDB not connected.")
+    return {"most_disliked": mongo_service.get_most_disliked_paintings(limit=15)}
+
+
+@app.get("/api/v1/analytics/recent-feedback")
+async def analytics_recent_feedback():
+    """Get recent feedback entries."""
+    if not mongo_service or not mongo_service.is_connected():
+        raise HTTPException(status_code=503, detail="MongoDB not connected.")
+    return {"feedback": mongo_service.get_recent_feedback(limit=20)}
 @app.post("/api/v1/sync-products")
 async def sync_products():
     try:
