@@ -268,28 +268,29 @@ async def analytics_full_dashboard():
 # ── Feedback Endpoints ───────────────────────────────────────
 
 class FeedbackRequest(BaseModel):
-    product_id: str
-    title: str
-    feedback: str  # "like" or "dislike"
-    query: str = ""
-    platform: str = "web"
+    painting_id: str
+    action: str                                  # 'like' | 'dislike'
+    painting_handle: Optional[str] = None
+    recommendation_type: Optional[str] = None    # 'image' | 'text'
+    user_query: Optional[str] = None
+    timestamp: Optional[str] = None
 
 
 @app.post("/api/v1/feedback")
 async def submit_feedback(request: FeedbackRequest):
     """Customer submits thumbs up/down on a recommended painting."""
-    if request.feedback not in ["like", "dislike"]:
-        raise HTTPException(status_code=400, detail="Feedback must be 'like' or 'dislike'.")
+    if request.action not in ["like", "dislike"]:
+        raise HTTPException(status_code=400, detail="Action must be 'like' or 'dislike'.")
 
     if mongo_service and mongo_service.is_connected():
         mongo_service.save_feedback(
-            product_id=request.product_id,
-            title=request.title,
-            feedback_type=request.feedback,
-            query=request.query,
-            platform=request.platform,
+            product_id=request.painting_id,
+            title=request.painting_handle or "",
+            feedback_type=request.action,
+            query=request.user_query or "",
+            platform=request.recommendation_type or "app",
         )
-        return {"success": True, "message": f"Thank you for your feedback!"}
+        return {"status": "ok", "stored": True}
     else:
         raise HTTPException(status_code=503, detail="MongoDB not connected.")
 
