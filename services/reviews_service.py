@@ -5,7 +5,7 @@ import os
 import time
 import hmac
 import hashlib
-import json  # Fixed the missing json import issue!
+import json
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -29,13 +29,6 @@ class ReviewCreate(BaseModel):
 
 # ─── HELPER: GENERATE HMAC-SHA256 SIGNATURE ─────────────────────────
 def generate_trustoo_signature(query_params: dict, body_str: str, timestamp: str) -> str:
-    """
-    Trustoo updated their security to HMAC-SHA256.
-    1. Gather all params including timestamp.
-    2. Sort alphabetically.
-    3. Append body with '|' if exists.
-    4. Sign with PRIVATE_TOKEN.
-    """
     params = query_params.copy()
     params['timestamp'] = timestamp
     
@@ -55,13 +48,11 @@ def generate_trustoo_signature(query_params: dict, body_str: str, timestamp: str
     
     return signature.lower()
 
-
 # ─── GET REVIEWS LIST ───────────────────────────────────────────────
 @router.get("/api/v1/reviews")
 async def get_reviews(product_id: str, page: int = 1, page_size: int = 20):
     timestamp = str(int(time.time()))
     
-    # 1. Fetch the reviews list
     query_params = {
         "product_id": str(product_id),
         "page": str(page),
@@ -87,11 +78,12 @@ async def get_reviews(product_id: str, page: int = 1, page_size: int = 20):
     if data.get("code") != 0:
         raise HTTPException(status_code=400, detail=data.get("message", "Error fetching reviews"))
         
-    trustoo_data = data.get("data", {})
-    page_info = trustoo_data.get("page", {})
-    trustoo_list = trustoo_data.get("list", [])
+    # FIX: Trustoo returns `null` if there are 0 reviews. 
+    # We use `or {}` and `or []` to prevent the backend from crashing.
+    trustoo_data = data.get("data") or {}
+    page_info = trustoo_data.get("page") or {}
+    trustoo_list = trustoo_data.get("list") or []
     
-    # 2. Fetch the average rating (Trustoo stores this in a separate endpoint)
     rating_query = {"product_id": str(product_id)}
     rating_sign = generate_trustoo_signature(rating_query, "", timestamp)
     rating_headers = {
@@ -101,19 +93,19 @@ async def get_reviews(product_id: str, page: int = 1, page_size: int = 20):
     }
     rating_url = f"{TRUSTOO_BASE}/api/v1/openapi/get_rating"
     
-    average_rating = 5.0 # Fallback
+    average_rating = 0.0 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             rr = await client.get(rating_url, params=rating_query, headers=rating_headers)
             if rr.status_code == 200 and rr.json().get("code") == 0:
-                average_rating = float(rr.json().get("data", {}).get("rating_value", 5.0))
+                # Safely handle null data here as well
+                rating_data = rr.json().get("data") or {}
+                average_rating = float(rating_data.get("rating_value", 0.0))
     except Exception:
-        pass # If rating fails, just continue with fallback
+        pass 
     
-    # 3. Map Trustoo response to EXACTLY what Flutter expects
     formatted_reviews = []
     for item in trustoo_list:
-        # Handle different image formats returned by Trustoo
         media_list = []
         if isinstance(item.get("images"), list):
             for m in item["images"]:
@@ -142,7 +134,6 @@ async def get_reviews(product_id: str, page: int = 1, page_size: int = 20):
         "reviews": formatted_reviews
     }
 
-
 # ─── CREATE NEW REVIEW ──────────────────────────────────────────────
 @router.post("/api/v1/reviews/create")
 async def create_review(review: ReviewCreate):
@@ -150,19 +141,16 @@ async def create_review(review: ReviewCreate):
     payload = {
         "product_id": str(review.product_id),
         "rating": review.rating,
-        "author": review.author.strip() or "Anonymous",
+        "author": review.author.strip() if review.author else "Anonymous",
         "author_country": review.author_country or "PK",
-        "content": review.content.strip(),
+        "content": review.content.strip() if review.content else "",
     }
     if review.title:
         payload["title"] = review.title.strip()
     if review.author_email:
         payload["author_email"] = review.author_email.strip()
 
-    # json.dumps must have no spaces to exactly match signature
     body_str = json.dumps(payload, separators=(",", ":"))
-    
-    # Generate HMAC-SHA256 signature for POST (no query params, just timestamp and body)
     sign = generate_trustoo_signature({}, body_str, timestamp)
 
     headers = {
