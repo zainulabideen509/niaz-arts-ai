@@ -19,6 +19,8 @@ from services.recommendation_service import RecommendationService
 from services.product_sync import ProductSyncService
 from services.mongo_service import MongoService
 from services.notification_service import router as notify_router
+from services.reviews_service import router as reviews_router
+app.include_router(reviews_router)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("niaz-arts-ai")
