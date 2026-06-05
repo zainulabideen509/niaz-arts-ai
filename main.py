@@ -20,7 +20,6 @@ from services.product_sync import ProductSyncService
 from services.mongo_service import MongoService
 from services.notification_service import router as notify_router
 from services.reviews_service import router as reviews_router
-app.include_router(reviews_router)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("niaz-arts-ai")
@@ -40,6 +39,8 @@ app.add_middleware(
 )
 
 app.include_router(notify_router)
+app.include_router(reviews_router)
+
 clip_service: Optional[CLIPService] = None
 color_service: Optional[ColorService] = None
 recommendation_service: Optional[RecommendationService] = None
