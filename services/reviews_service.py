@@ -179,3 +179,40 @@ async def reviews_debug(product_id: str = Query("0")):
     except Exception as e:
         info["request_error"] = str(e)
     return info
+
+
+# ── Store-wide reviews (for home testimonials carousel) ──────────────────────
+@router.get("/api/v1/reviews/store")
+async def get_store_reviews(page_size: int = Query(20), min_rating: int = Query(4)):
+    """Return recent high-rating reviews across the whole store."""
+    if not PUBLIC_TOKEN:
+        raise HTTPException(status_code=503, detail="TRUSTOO_PUBLIC_TOKEN not set.")
+    params = {"page": "1", "page_size": str(page_size), "sort_by": "created-descending"}
+    headers = {"Public-Token": PUBLIC_TOKEN}
+    url = f"{TRUSTOO_BASE}/api/v1/openapi/get_reviews"
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(url, params=params, headers=headers)
+            data = r.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Trustoo request error: {e}")
+    if isinstance(data, dict) and data.get("code") not in (None, 0):
+        raise HTTPException(status_code=502, detail=f"Trustoo: {data.get('message')}")
+    d = data.get("data", {}) if isinstance(data, dict) else {}
+    reviews = d.get("list", []) or []
+    out = []
+    for rv in reviews:
+        rating = rv.get("rating", 0) or 0
+        if rating < min_rating:
+            continue
+        content = (rv.get("content") or "").strip()
+        if not content:
+            continue
+        out.append({
+            "author": rv.get("author") or "Happy Customer",
+            "rating": rating,
+            "content": content,
+            "country": rv.get("author_country", "") or "",
+            "product": rv.get("product_title", "") or "",
+        })
+    return {"reviews": out}
